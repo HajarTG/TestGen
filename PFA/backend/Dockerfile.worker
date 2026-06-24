@@ -1,0 +1,31 @@
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    default-jdk \
+    maven \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/ .
+
+# Download Java dependencies for test validation
+
+RUN mkdir -p /app/lib && \
+    curl -L -o /app/lib/junit-platform-console-standalone-1.10.2.jar https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.10.2/junit-platform-console-standalone-1.10.2.jar && \
+    curl -L -o /app/lib/mockito-core-5.11.0.jar https://repo1.maven.org/maven2/org/mockito/mockito-core/5.11.0/mockito-core-5.11.0.jar && \
+    curl -L -o /app/lib/mockito-junit-jupiter-5.11.0.jar https://repo1.maven.org/maven2/org/mockito/mockito-junit-jupiter/5.11.0/mockito-junit-jupiter-5.11.0.jar && \
+    curl -L -o /app/lib/byte-buddy-1.14.12.jar https://repo1.maven.org/maven2/net/bytebuddy/byte-buddy/1.14.12/byte-buddy-1.14.12.jar && \
+    curl -L -o /app/lib/byte-buddy-agent-1.14.12.jar https://repo1.maven.org/maven2/net/bytebuddy/byte-buddy-agent/1.14.12/byte-buddy-agent-1.14.12.jar && \
+    curl -L -o /app/lib/objenesis-3.3.jar https://repo1.maven.org/maven2/org/objenesis/objenesis/3.3/objenesis-3.3.jar
+
+WORKDIR /build/java-parser
+COPY java-parser/pom.xml .
+RUN mvn dependency:go-offline -q
+
+WORKDIR /app
+
+CMD ["python", "-m", "celery", "-A", "app.celery_app.celery_config", "worker", "--loglevel=info", "--concurrency=4", "-Q", "testgen"]
